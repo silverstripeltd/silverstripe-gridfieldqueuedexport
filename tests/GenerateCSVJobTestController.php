@@ -26,7 +26,7 @@ class GenerateCSVJobTestController extends Controller implements TestOnly
     /**
      * @return Form
      */
-    public function Form()
+    public function Form($emailCSV = false)
     {
         // Get records
         $records = GenerateCSVJobTestRecord::get();
@@ -34,7 +34,8 @@ class GenerateCSVJobTestController extends Controller implements TestOnly
         // Set config
         $config = GridFieldConfig_RecordEditor::create();
         $config->removeComponentsByType(GridFieldExportButton::class);
-        $config->addComponent(new GridFieldQueuedExportButton('buttons-after-left'));
+        $config->addComponent($exportButton = new GridFieldQueuedExportButton('buttons-after-left'));
+        $exportButton->setEmailCSV($emailCSV);
         $fields = new GridField('MyGridfield', 'My Records', $records, $config);
         /** @skipUpgrade */
         return Form::create($this, 'Form', new FieldList($fields), new FieldList());

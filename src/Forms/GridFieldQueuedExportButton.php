@@ -12,6 +12,7 @@ use SilverStripe\Forms\GridField\GridField_FormAction;
 use SilverStripe\Forms\GridField\GridField_HTMLProvider;
 use SilverStripe\Forms\GridField\GridField_URLHandler;
 use SilverStripe\ORM\FieldType\DBHTMLText;
+use SilverStripe\ORM\ValidationResult;
 use SilverStripe\Security\Security;
 use SilverStripe\View\ArrayData;
 use SilverStripe\View\Requirements;
@@ -47,6 +48,17 @@ class GridFieldQueuedExportButton implements GridField_HTMLProvider, GridField_A
      * Fragment to write the button to
      */
     protected $targetFragment;
+
+    /**
+     * @var boolean
+     */
+    protected $emailCSV = false;
+
+    /**
+     * @var string
+     */
+    protected $exportMessage =
+        "Export started. The generated CSV will be emailed to you once the export has completed.";
 
     /**
      * @param string $targetFragment The HTML fragment to write the button into
@@ -113,7 +125,7 @@ class GridFieldQueuedExportButton implements GridField_HTMLProvider, GridField_A
     public function startExport($gridField)
     {
         $job = new GenerateCSVJob();
-
+        $controller = Controller::curr();
         // Set the parameters that allow re-discovering this gridfield during background execution
         $job->setGridField($gridField);
         $job->setSession(Injector::inst()->get(HTTPRequest::class)->getSession()->getAll());
@@ -128,8 +140,16 @@ class GridFieldQueuedExportButton implements GridField_HTMLProvider, GridField_A
         // Queue the job
         singleton(QueuedJobService::class)->queueJob($job);
 
-        // Redirect to the status update page
-        return Controller::curr()->redirect($gridField->Link('/export/' . $job->getSignature()));
+        if ($this->getEmailCSV()) {
+            $job->setEmailCSV(true);
+            $form = $gridField->getForm();
+            $form->sessionMessage($this->getExportMessage(), ValidationResult::TYPE_GOOD);
+            // Redirect to the current page
+            return $controller->redirectBack();
+        } else {
+            // Redirect to the status update page
+            return Controller::curr()->redirect($gridField->Link('/export/' . $job->getSignature()));
+        }
     }
 
 
@@ -311,4 +331,41 @@ class GridFieldQueuedExportButton implements GridField_HTMLProvider, GridField_A
         $this->csvHasHeader = $bool;
         return $this;
     }
+
+    /**
+     * @return boolean
+     */
+    public function getEmailCSV()
+    {
+        return $this->emailCSV;
+    }
+
+    /**
+     * @param boolean
+     * @return $this
+     */
+    public function setEmailCSV($bool)
+    {
+        $this->emailCSV = $bool;
+        return $this;
+    }
+
+    /**
+     * @return string
+     */
+    public function getExportMessage()
+    {
+        return $this->exportMessage;
+    }
+
+    /**
+     * @param string
+     * @return $this
+     */
+    public function setExportMessage($exportMessage)
+    {
+        $this->exportMessage = $exportMessage;
+        return $this;
+    }
+
 }

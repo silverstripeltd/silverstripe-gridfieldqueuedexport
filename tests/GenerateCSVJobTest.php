@@ -8,6 +8,7 @@ use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\GridfieldQueuedExport\Jobs\GenerateCSVJob;
+use SilverStripe\SiteConfig\SiteConfig;
 
 class GenerateCSVJobTest extends SapphireTest
 {
@@ -42,6 +43,8 @@ class GenerateCSVJobTest extends SapphireTest
         // Build session
         $memberID = $this->logInWithPermission('ADMIN');
         $session = ['loggedInAs' => $memberID];
+
+        Config::modify()->set(GenerateCSVJob::class, 'chunk_size', 10);
 
         // Build controller
         $controller = new GenerateCSVJobTestController();
@@ -119,6 +122,46 @@ class GenerateCSVJobTest extends SapphireTest
         $this->assertEquals(implode("\r\n", $expected), $actual);
     }
 
+    public function testEmailExport()
+    {
+        // Build session
+        $memberID = $this->logInWithPermission('ADMIN');
+        $session = ['loggedInAs' => $memberID];
+
+        Config::modify()->set(GenerateCSVJob::class, 'chunk_size', 10);
+
+        // Build controller
+        $controller = new GenerateCSVJobTestController();
+        $form = $controller->Form(true);
+        $gridfield = $form->Fields()->fieldByName('MyGridfield');
+
+        // Build job
+        $job = $this->createJob($gridfield, $session);
+        $path = sprintf('%1$s/.exports/%2$s/%2$s.csv', ASSETS_PATH, $job->getSignature());
+        $this->paths[] = $path; // Mark for cleanup later
+
+        // Test that the job runs
+        $this->assertFileNotExists($path);
+        $job->setup();
+        $job->process();
+        $job->afterComplete();
+        $this->assertFileExists($path);
+
+        // Test that the output matches the expected
+        $expected = [
+            'Title,Content,"Publish On"',
+            '"Record 1","<p>""Record 1"" Body</p>","2015-01-01 23:34:01"',
+            '"Record 2","<p>""Record 2"" Body</p>","2015-01-02 23:34:01"',
+            '"Record 3","<p>""Record 3"" Body</p>","2015-01-03 23:34:01"',
+            '',
+        ];
+        $actual = file_get_contents($path);
+        $this->assertEquals(implode("\r\n", $expected), $actual);
+
+        $this->assertEmailSent('ADMIN@example.org');
+
+    }
+
     /**
      * Rough copy of GridFieldQueuedExportButton::startExport
      *
@@ -133,6 +176,7 @@ class GenerateCSVJobTest extends SapphireTest
         $job->setSession($session);
         $job->setSeparator(',');
         $job->setIncludeHeader(true);
+
         return $job;
     }
 }
