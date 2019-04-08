@@ -43,8 +43,6 @@ class GenerateCSVJob extends AbstractQueuedJob
 
     protected $writer;
 
-    protected $emailCSV = false;
-
     public function __construct()
     {
         $this->ID = Injector::inst()->create(RandomGenerator::class)->randomToken('sha1');
@@ -302,9 +300,6 @@ class GenerateCSVJob extends AbstractQueuedJob
     {
         parent::setup();
         $gridField = $this->getGridField();
-        $fieldType = 'SilverStripe\GridfieldQueuedExport\Forms\GridFieldQueuedExportButton';
-        $queuedExportButton = $gridField->getConfig()->getComponentByType($fieldType);
-        $this->setEmailCSV($queuedExportButton->getEmailCSV());
         $this->totalSteps = $gridField->getManipulatedList()->count();
     }
 
@@ -329,10 +324,6 @@ class GenerateCSVJob extends AbstractQueuedJob
         }
     }
 
-
-    /**
-     * Generate export fields for CSV.
-     */
     public function process()
     {
         $gridField = $this->getGridField();
@@ -358,51 +349,69 @@ class GenerateCSVJob extends AbstractQueuedJob
 
         if ($this->currentStep >= $this->totalSteps) {
             $this->isComplete = true;
+
+            if ($this->isMarkedToSendEmail()) {
+                $adminUser = Security::getCurrentUser();
+                // currentUser should be injected by QueuedJobService  and should be equal to "RunAs" value from JobDescriptor
+                $this->sendEmailWithExportedFile($adminUser->Email);
+                $this->removeGeneratedExportFile();
+            }
+
+            $this->addMessage('CSV Export completed');
         }
     }
 
     /**
-     * Called when the job is determined to be 'complete'
+     * @return bool
      */
-    public function afterComplete()
+    public function isMarkedToSendEmail()
     {
-        $admin = Security::getCurrentUser();
-        $adminAddress = $admin->Email;
-        if ($this->getEmailCSV() && Email::is_valid_address($adminAddress)) {
-            $this->sendExportEmail($adminAddress);
-        }
+        // stored in JobData retrived via magic __get
+        return (bool)$this->emailCSV === true;
     }
 
     /**
-     * @return boolean
-     */
-    public function getEmailCSV()
-    {
-        return $this->emailCSV;
-    }
-
-    /**
-     * @param boolean
+     * @param bool
      * @return $this
      */
-    public function setEmailCSV($bool)
+    public function setSendEmailWithCsv($bool)
     {
-        $this->emailCSV = $bool;
+        // stored in JobData via magic __set()
+        $this->emailCSV = (bool)$bool;
         return $this;
     }
 
-    public function sendExportEmail($adminAddress)
+    private function sendEmailWithExportedFile($emailAddress)
     {
+        $this->addMessage(sprintf('Sending email with CSV Export to `%s`', $emailAddress));
+
+        if (!Email::is_valid_address($emailAddress)) {
+            $this->addMessage(
+                sprintf('Email `%s` is not valid, email with CSV export will not be send', $emailAddress),
+                'WARNING'
+            );
+
+            return;
+        }
+
         $filePath = $this->getOutputPath();
         $mail = Email::create();
         $mail->setSubject($this->jobData->GridFieldName . ' CSV Export ' . DBDatetime::now()->Format(DBDatetime::ISO_DATETIME));
         $mail->addAttachment($filePath);
         $from = $this->config && $this->config->SendMailFrom ? $this->config->SendMailFrom : 'site@' . Director::host();
         $mail->setFrom($from);
-        $mail->setTo($adminAddress);
+        $mail->setTo($emailAddress);
         $mail->setBody('Please see attached CSV file');
-        $mail->send();
 
+        if ($mail->send() === true) {
+            $this->addMessage('Email was successfully sent');
+        } else {
+            $this->addMessage('Failed to send email with export file', 'WARNING');
+        }
+    }
+
+    private function removeGeneratedExportFile() {
+        $filePath = $this->getOutputPath();
         unlink($filePath);
         rmdir(dirname($filePath));
     }
