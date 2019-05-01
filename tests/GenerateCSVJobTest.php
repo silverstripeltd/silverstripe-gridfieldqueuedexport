@@ -159,7 +159,6 @@ class GenerateCSVJobTest extends SapphireTest
         $this->assertEquals(implode("\r\n", $expected), $actual);
 
         $this->assertEmailSent('ADMIN@example.org');
-
     }
 
     /**

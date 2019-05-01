@@ -352,7 +352,8 @@ class GenerateCSVJob extends AbstractQueuedJob
 
             if ($this->isMarkedToSendEmail()) {
                 $adminUser = Security::getCurrentUser();
-                // currentUser should be injected by QueuedJobService  and should be equal to "RunAs" value from JobDescriptor
+                // currentUser should be injected by QueuedJobService
+                // and should be equal to "RunAs" value from JobDescriptor
                 $this->sendEmailWithExportedFile($adminUser->Email);
                 $this->removeGeneratedExportFile();
             }
@@ -396,7 +397,8 @@ class GenerateCSVJob extends AbstractQueuedJob
 
         $filePath = $this->getOutputPath();
         $mail = Email::create();
-        $mail->setSubject($this->jobData->GridFieldName . ' CSV Export ' . DBDatetime::now()->Format(DBDatetime::ISO_DATETIME));
+        $mail->setSubject($this->jobData->GridFieldName
+            . ' CSV Export ' . DBDatetime::now()->Format(DBDatetime::ISO_DATETIME));
         $mail->addAttachment($filePath);
         $from = $this->config && $this->config->SendMailFrom ? $this->config->SendMailFrom : 'site@' . Director::host();
         $mail->setFrom($from);
@@ -410,7 +412,8 @@ class GenerateCSVJob extends AbstractQueuedJob
         }
     }
 
-    private function removeGeneratedExportFile() {
+    private function removeGeneratedExportFile()
+    {
         $filePath = $this->getOutputPath();
         unlink($filePath);
         rmdir(dirname($filePath));

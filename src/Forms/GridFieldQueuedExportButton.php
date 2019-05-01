@@ -368,5 +368,4 @@ class GridFieldQueuedExportButton implements GridField_HTMLProvider, GridField_A
         $this->exportMessage = $exportMessage;
         return $this;
     }
-
 }
