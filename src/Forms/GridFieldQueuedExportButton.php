@@ -137,11 +137,12 @@ class GridFieldQueuedExportButton implements GridField_HTMLProvider, GridField_A
             $job->setColumns($this->exportColumns);
         }
 
+        $job->setSendEmailWithCsv($this->getEmailCSV());
+
         // Queue the job
         singleton(QueuedJobService::class)->queueJob($job);
 
         if ($this->getEmailCSV()) {
-            $job->setEmailCSV(true);
             $form = $gridField->getForm();
             $form->sessionMessage($this->getExportMessage(), ValidationResult::TYPE_GOOD);
             // Redirect to the current page
@@ -367,5 +368,4 @@ class GridFieldQueuedExportButton implements GridField_HTMLProvider, GridField_A
         $this->exportMessage = $exportMessage;
         return $this;
     }
-
 }
