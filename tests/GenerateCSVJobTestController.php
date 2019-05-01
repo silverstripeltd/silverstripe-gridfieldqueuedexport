@@ -24,6 +24,7 @@ class GenerateCSVJobTestController extends Controller implements TestOnly
     }
 
     /**
+     * @param bool $emailCSV
      * @return Form
      */
     public function Form($emailCSV = false)

@@ -7,8 +7,8 @@ use SilverStripe\Control\Director;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\GridField\GridField;
+use SilverStripe\GridfieldQueuedExport\Forms\GridFieldQueuedExportButton;
 use SilverStripe\GridfieldQueuedExport\Jobs\GenerateCSVJob;
-use SilverStripe\SiteConfig\SiteConfig;
 
 class GenerateCSVJobTest extends SapphireTest
 {
@@ -48,7 +48,7 @@ class GenerateCSVJobTest extends SapphireTest
 
         // Build controller
         $controller = new GenerateCSVJobTestController();
-        $form = $controller->Form();
+        $form = $controller->Form(false);
         $gridfield = $form->Fields()->fieldByName('MyGridfield');
 
         // Build job
@@ -85,7 +85,7 @@ class GenerateCSVJobTest extends SapphireTest
 
         // Build controller
         $controller = new GenerateCSVJobTestController();
-        $form = $controller->Form();
+        $form = $controller->Form(false);
         /** @var GridField $gridfield */
         $gridfield = $form->Fields()->fieldByName('MyGridfield');
 
@@ -134,29 +134,16 @@ class GenerateCSVJobTest extends SapphireTest
         $controller = new GenerateCSVJobTestController();
         $form = $controller->Form(true);
         $gridfield = $form->Fields()->fieldByName('MyGridfield');
-
         // Build job
         $job = $this->createJob($gridfield, $session);
         $path = sprintf('%1$s/.exports/%2$s/%2$s.csv', ASSETS_PATH, $job->getSignature());
-        $this->paths[] = $path; // Mark for cleanup later
 
         // Test that the job runs
         $this->assertFileNotExists($path);
         $job->setup();
         $job->process();
         $job->afterComplete();
-        $this->assertFileExists($path);
-
-        // Test that the output matches the expected
-        $expected = [
-            'Title,Content,"Publish On"',
-            '"Record 1","<p>""Record 1"" Body</p>","2015-01-01 23:34:01"',
-            '"Record 2","<p>""Record 2"" Body</p>","2015-01-02 23:34:01"',
-            '"Record 3","<p>""Record 3"" Body</p>","2015-01-03 23:34:01"',
-            '',
-        ];
-        $actual = file_get_contents($path);
-        $this->assertEquals(implode("\r\n", $expected), $actual);
+        $this->assertFileNotExists($path); // file must be deleted when email is send
 
         $this->assertEmailSent('ADMIN@example.org');
     }
@@ -175,6 +162,11 @@ class GenerateCSVJobTest extends SapphireTest
         $job->setSession($session);
         $job->setSeparator(',');
         $job->setIncludeHeader(true);
+        $exportButton = $gridField->getConfig()->getComponentByType(GridFieldQueuedExportButton::class);
+        if (!($exportButton instanceof GridFieldQueuedExportButton)) {
+            throw new \InvalidArgumentException('Need to pass gridField with ' . GridFieldQueuedExportButton::class);
+        }
+        $job->setSendEmailWithCsv($exportButton->getEmailCSV());
 
         return $job;
     }
