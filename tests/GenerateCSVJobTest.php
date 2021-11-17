@@ -1,35 +1,54 @@
 <?php
 
-class GenerateCSVJobTest extends SapphireTest {
+namespace SilverStripe\GridFieldQueuedExport\Tests;
+
+use SilverStripe\Assets\Filesystem;
+use SilverStripe\Control\Director;
+use SilverStripe\Core\Config\Config;
+use SilverStripe\Dev\SapphireTest;
+use SilverStripe\Forms\GridField\GridField;
+use SilverStripe\GridfieldQueuedExport\Forms\GridFieldQueuedExportButton;
+use SilverStripe\GridfieldQueuedExport\Jobs\GenerateCSVJob;
+
+class GenerateCSVJobTest extends SapphireTest
+{
 
     protected static $fixture_file = 'GenerateCSVJobTest.yml';
 
-    protected $extraDataObjects = array('GenerateCSVJobTest_Record');
+    protected static $extra_dataobjects = [GenerateCSVJobTestRecord::class];
 
-    public function setUp() {
+    protected static $extra_controllers = [GenerateCSVJobTestController::class];
+
+    protected function setUp()
+    {
         parent::setUp();
-        Config::inst()->update('Director', 'rules', array(
-            'jobtest//$Action/$ID/$OtherID' => 'GenerateCSVJobTest_Controller'
-        ));
+
+        Config::modify()->merge(Director::class, 'rules', [
+            'jobtest//$Action/$ID/$OtherID' => GenerateCSVJobTestController::class
+        ]);
     }
 
-    protected $paths = array();
+    protected $paths = [];
 
-    public function tearDown() {
-        foreach($this->paths as $path) {
+    protected function tearDown()
+    {
+        foreach ($this->paths as $path) {
             Filesystem::removeFolder(dirname($path));
         }
         parent::tearDown();
     }
 
-    public function testGenerateExport() {
+    public function testGenerateExport()
+    {
         // Build session
         $memberID = $this->logInWithPermission('ADMIN');
-        $session = array('loggedInAs' => $memberID);
+        $session = ['loggedInAs' => $memberID];
+
+        Config::modify()->set(GenerateCSVJob::class, 'chunk_size', 10);
 
         // Build controller
-        $controller = new GenerateCSVJobTest_Controller();
-        $form = $controller->Form();
+        $controller = new GenerateCSVJobTestController();
+        $form = $controller->Form(false);
         $gridfield = $form->Fields()->fieldByName('MyGridfield');
 
         // Build job
@@ -39,19 +58,94 @@ class GenerateCSVJobTest extends SapphireTest {
 
         // Test that the job runs
         $this->assertFileNotExists($path);
+        $job->setup();
         $job->process();
+        $job->afterComplete();
         $this->assertFileExists($path);
 
         // Test that the output matches the expected
-        $expected = <<<EOS
-"Title","Content","Publish On"
-"Record 1","<p>""Record 1"" Body</p>","2015-01-01 23:34:01"
-"Record 2","<p>""Record 2"" Body</p>","2015-01-02 23:34:01"
-"Record 3","<p>""Record 3"" Body</p>","2015-01-03 23:34:01"
-
-EOS;
+        $expected = [
+            'Title,Content,"Publish On"',
+            '"Record 1","<p>""Record 1"" Body</p>","2015-01-01 23:34:01"',
+            '"Record 2","<p>""Record 2"" Body</p>","2015-01-02 23:34:01"',
+            '"Record 3","<p>""Record 3"" Body</p>","2015-01-03 23:34:01"',
+            '',
+        ];
         $actual = file_get_contents($path);
-        $this->assertEquals($expected, $actual);
+        $this->assertEquals(implode("\r\n", $expected), $actual);
+    }
+
+    public function testGenerateExportOverMultipleSteps()
+    {
+        Config::modify()->set(GenerateCSVJob::class, 'chunk_size', 1);
+
+        // Build session
+        $memberID = $this->logInWithPermission('ADMIN');
+        $session = ['loggedInAs' => $memberID];
+
+        // Build controller
+        $controller = new GenerateCSVJobTestController();
+        $form = $controller->Form(false);
+        /** @var GridField $gridfield */
+        $gridfield = $form->Fields()->fieldByName('MyGridfield');
+
+        // Build job
+        $job = $this->createJob($gridfield, $session);
+        $path = sprintf('%1$s/.exports/%2$s/%2$s.csv', ASSETS_PATH, $job->getSignature());
+        $this->paths[] = $path; // Mark for cleanup later
+
+        // Test that the job runs
+        $this->assertFileNotExists($path);
+        $count = 0;
+        while (!$job->jobFinished()) {
+            ++$count;
+            if ($job->currentStep) {
+                $job->prepareForRestart();
+            } else {
+                $job->setup();
+            }
+            $job->process();
+        }
+        $job->afterComplete();
+        $this->assertFileExists($path);
+        $this->assertEquals(3, $count);
+
+        // Test that the output matches the expected
+        $expected = [
+            'Title,Content,"Publish On"',
+            '"Record 1","<p>""Record 1"" Body</p>","2015-01-01 23:34:01"',
+            '"Record 2","<p>""Record 2"" Body</p>","2015-01-02 23:34:01"',
+            '"Record 3","<p>""Record 3"" Body</p>","2015-01-03 23:34:01"',
+            '',
+        ];
+        $actual = file_get_contents($path);
+        $this->assertEquals(implode("\r\n", $expected), $actual);
+    }
+
+    public function testEmailExport()
+    {
+        // Build session
+        $memberID = $this->logInWithPermission('ADMIN');
+        $session = ['loggedInAs' => $memberID];
+
+        Config::modify()->set(GenerateCSVJob::class, 'chunk_size', 10);
+
+        // Build controller
+        $controller = new GenerateCSVJobTestController();
+        $form = $controller->Form(true);
+        $gridfield = $form->Fields()->fieldByName('MyGridfield');
+        // Build job
+        $job = $this->createJob($gridfield, $session);
+        $path = sprintf('%1$s/.exports/%2$s/%2$s.csv', ASSETS_PATH, $job->getSignature());
+
+        // Test that the job runs
+        $this->assertFileNotExists($path);
+        $job->setup();
+        $job->process();
+        $job->afterComplete();
+        $this->assertFileNotExists($path); // file must be deleted when email is send
+
+        $this->assertEmailSent('ADMIN@example.org');
     }
 
     /**
@@ -61,52 +155,19 @@ EOS;
      * @param array $session
      * @return GenerateCSVJob
      */
-    protected function createJob($gridField, $session) {
+    protected function createJob($gridField, $session)
+    {
         $job = new GenerateCSVJob();
         $job->setGridField($gridField);
         $job->setSession($session);
         $job->setSeparator(',');
         $job->setIncludeHeader(true);
+        $exportButton = $gridField->getConfig()->getComponentByType(GridFieldQueuedExportButton::class);
+        if (!($exportButton instanceof GridFieldQueuedExportButton)) {
+            throw new \InvalidArgumentException('Need to pass gridField with ' . GridFieldQueuedExportButton::class);
+        }
+        $job->setSendEmailWithCsv($exportButton->getEmailCSV());
+
         return $job;
-    }
-}
-
-
-class GenerateCSVJobTest_Record extends DataObject implements TestOnly {
-
-    private static $summary_fields = array(
-        'Title',
-        'Content',
-        'PublishOn',
-    );
-
-    private static $default_sort = array(
-        'Title',
-    );
-
-    private static $db = array(
-        'Title' => 'Varchar',
-        'Content' => 'Varchar',
-        'PublishOn' => 'SS_DateTime'
-    );
-}
-
-class GenerateCSVJobTest_Controller extends Controller implements TestOnly {
-    private static $allowed_actions = array('Form');
-
-    public function Link() {
-        return 'jobtest/';
-    }
-
-    public function Form() {
-        // Get records
-        $records = GenerateCSVJobTest_Record::get();
-
-        // Set config
-        $config = GridFieldConfig_RecordEditor::create();
-        $config->removeComponentsByType('GridFieldExportButton');
-        $config->addComponent(new GridFieldQueuedExportButton('buttons-after-left'));
-        $fields = new GridField('MyGridfield', 'My Records', $records, $config);
-        return new Form($this, 'Form', new FieldList($fields), new FieldList());
     }
 }

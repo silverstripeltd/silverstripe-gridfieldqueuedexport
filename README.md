@@ -1,7 +1,9 @@
 # GridField Queued Export
 
 [![Build Status](https://travis-ci.org/silverstripe/silverstripe-gridfieldqueuedexport.svg?branch=master)](https://travis-ci.org/silverstripe/silverstripe-gridfieldqueuedexport)
-![helpfulrobot](https://helpfulrobot.io/silverstripe/gridfieldqueuedexport/badge)
+[![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/silverstripe/silverstripe-gridfieldqueuedexport/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/silverstripe/silverstripe-gridfieldqueuedexport/?branch=master)
+[![SilverStripe supported module](https://img.shields.io/badge/silverstripe-supported-0071C4.svg)](https://www.silverstripe.org/software/addons/silverstripe-commercially-supported-module-list/)
+[![Code Coverage](https://codecov.io/gh/silverstripe/silverstripe-gridfieldqueuedexport/branch/master/graph/badge.svg)](https://codecov.io/gh/silverstripe/silverstripe-gridfielqueuedexport)
 
 ## Introduction
 
@@ -16,13 +18,14 @@ when more than 1000 records need to be exported. The module should be able to ex
 
 ## Requirements
 
- * SilverStripe 3.3+
+ * SilverStripe 4.0+
  * The [queuedjobs](https://github.com/silverstripe-australia/silverstripe-queuedjobs) module
+ 
+ **Note:** For SilverStripe 3.x, please use the [1.x release line](https://github.com/silverstripe/silverstripe-gridfieldqueuedexport/tree/1.0).
 
-## Installation via Composer
+## Installation
 
-	cd path/to/my/silverstripe/site
-	composer require "silverstripe/gridfieldqueuedexport:*"
+To install run `composer require silverstripe/gridfieldqueuedexport`.
 
 ## Configuration
 
