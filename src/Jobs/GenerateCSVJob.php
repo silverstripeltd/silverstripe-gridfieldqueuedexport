@@ -3,7 +3,6 @@
 namespace SilverStripe\GridfieldQueuedExport\Jobs;
 
 use League\Csv\Writer;
-use SilverStripe\Assets\File;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\Email\Email;
@@ -17,12 +16,15 @@ use SilverStripe\Forms\GridField\GridFieldDataColumns;
 use SilverStripe\Forms\GridField\GridFieldExportButton;
 use SilverStripe\Forms\GridField\GridFieldPageCount;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
+use SilverStripe\GridfieldQueuedExport\Forms\GridFieldQueuedExportButtonResponse;
+use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\Security\RandomGenerator;
 use SilverStripe\Security\Security;
+use SilverStripe\UserForms\Model\Submission\SubmittedForm;
+use SilverStripe\UserForms\Model\Submission\SubmittedFormField;
 use Symbiote\QueuedJobs\Services\AbstractQueuedJob;
 use Symbiote\QueuedJobs\Services\QueuedJob;
-use SilverStripe\GridfieldQueuedExport\Forms\GridFieldQueuedExportButtonResponse;
 
 /**
  * Iteratively exports GridField data to a CSV file on disk, in order to support large exports.
@@ -277,7 +279,7 @@ class GenerateCSVJob extends AbstractQueuedJob
 
                         $value = $columnHeader($relObj);
                     } else {
-                        $value = $gridField->getDataFieldValue($item, $columnSource);
+                        $value = $this->getDataFieldValue($item, $columnSource);
 
                         if ($value === null) {
                             $value = $gridField->getDataFieldValue($item, $columnHeader);
@@ -417,5 +419,34 @@ class GenerateCSVJob extends AbstractQueuedJob
         $filePath = $this->getOutputPath();
         unlink($filePath);
         rmdir(dirname($filePath));
+    }
+
+
+    /**
+     * Get the Export value of a named field  on the given record.
+     *
+     * @param DataObject $record
+     * @param string $fieldName
+     *
+     * @return mixed
+     */
+    public function getDataFieldValue($record, $fieldName)
+    {
+        $formField = null;
+        if($record instanceof SubmittedForm){
+             // check values for a form field with the matching name.
+            $formField = SubmittedFormField::get()->filter(array(
+                'ParentID' => $record->ID,
+                'Name' => $fieldName
+            ))->first();
+        }
+
+        if (isset($formField)) {
+            return ($formField->hasMethod('getExportValue')) ?
+                $formField->getExportValue() :
+                $formField->getFormattedValue();
+        }
+
+        return null;
     }
 }
