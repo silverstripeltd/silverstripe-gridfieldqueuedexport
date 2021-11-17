@@ -279,7 +279,7 @@ class GenerateCSVJob extends AbstractQueuedJob
 
                         $value = $columnHeader($relObj);
                     } else {
-                        $value = $this->getDataFieldValue($item, $columnSource);
+                        $value = $this->getDataFieldValue($item, $columnSource) ?? $gridField->getDataFieldValue($item, $columnSource);
 
                         if ($value === null) {
                             $value = $gridField->getDataFieldValue($item, $columnHeader);
